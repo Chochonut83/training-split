@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Training Split</title>
+<meta name="description" content="Track who made it to each training session and split the cost.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Training">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#EEF1F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F141B" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a phone app — sticky title bar, one job per tab (Check in / Balances / Schedule / Settings), bottom tab bar within thumb reach. */
+:root{
+  --bg:#EEF1F4; --surface:#FFFFFF; --sunk:#E3E8EE; --line:#D3DAE2;
+  --ink:#141C26; --muted:#5B6878; --faint:#8A96A5;
+  --accent:#1F4FD1; --accent-ink:#FFFFFF; --accent-soft:#DCE5FB;
+  --good:#167A4A; --good-soft:#D7F0E2; --warn:#A35A00; --warn-soft:#FBEBD3; --bad:#B42318; --bad-soft:#FBE0DD;
+  --p1:#1F4FD1; --p2:#C2410C; --p3:#0F7B6C; --p4:#7A3FB8; --p5:#A1366B; --p6:#3D6B12;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:14px; --tabh:64px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0F141B; --surface:#171E27; --sunk:#1E2732; --line:#2A3542;
+  --ink:#E8EDF3; --muted:#9AA7B6; --faint:#6D7A89;
+  --accent:#7C9CFF; --accent-ink:#0B1020; --accent-soft:#1F2A4A;
+  --good:#4CC98A; --good-soft:#163526; --warn:#F0A848; --warn-soft:#3A2A12; --bad:#FF8A7A; --bad-soft:#3A1C19;
+  --p1:#7C9CFF; --p2:#FF9A5C; --p3:#4FD1BC; --p4:#C29BFF; --p5:#FF8FC0; --p6:#9BD36A; color-scheme:dark}}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+[hidden]{display:none!important}
+button,input,textarea{font:inherit;color:inherit}
+input,textarea{font-size:16px} /* 16px stops iPhone zooming in when a field is tapped */
+button{cursor:pointer;touch-action:manipulation}
+button:disabled{cursor:default;opacity:.5}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+h1,h2{font-family:var(--f-display);text-transform:uppercase;margin:0;line-height:1;text-wrap:balance}
+
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--line)}
+.topin{max-width:560px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.topbar h1{font-size:26px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
+.status{font-size:12.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.status[data-s="ok"]::before{background:var(--good)}
+.status[data-s="wait"]::before{background:var(--warn)}
+.status[data-s="bad"]::before{background:var(--bad)}
+
+main{max-width:560px;margin:0 auto;padding-block:16px calc(var(--tabh) + 28px + env(safe-area-inset-bottom,0px))}
+main.noTabs{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
+.view{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.banner{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:12px 14px;font-weight:600;font-size:14px;margin-bottom:16px}
+.banner.bad{background:var(--bad-soft);color:var(--bad)}
+
+.btn{min-height:44px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:0 16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:active{background:var(--sunk)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad);border-color:transparent;background:var(--bad-soft)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.block{width:100%}
+.btn.big{min-height:52px;font-size:17px}
+.field{min-height:44px;border:1px solid var(--line);background:var(--sunk);border-radius:12px;padding:0 14px;min-width:0}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:600;padding:0 4px;min-height:44px}
+.empty{padding:18px 16px;color:var(--muted);font-size:15px}
+.sechead{display:flex;justify-content:space-between;align-items:end;gap:8px;padding:0 2px}
+.sechead h2{font-size:20px;font-weight:700;letter-spacing:.05em}
+
+/* ---------- sign in ---------- */
+.signin{display:flex;flex-direction:column;gap:16px;padding-top:12px}
+.signin .lead{font-size:17px;color:var(--muted);margin:0}
+.signin .box{padding:18px 16px;display:flex;flex-direction:column;gap:12px}
+.signin h3{margin:0;font-size:18px}
+.signin p{margin:0;color:var(--muted);font-size:15px}
+.codein{font-family:var(--f-num);font-size:22px;letter-spacing:.12em;text-transform:uppercase;text-align:center;min-height:56px}
+.codebig{font-family:var(--f-num);font-size:26px;font-weight:600;letter-spacing:.1em;text-align:center;padding:14px;border-radius:12px;background:var(--sunk);user-select:all;-webkit-user-select:all;word-break:break-all}
+.or{display:flex;align-items:center;gap:12px;color:var(--faint);font-size:13px;text-transform:uppercase;letter-spacing:.1em}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* ---------- check in ---------- */
+.pager{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:center;gap:8px}
+.arrow{width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:24px;line-height:1;color:var(--ink);padding:0}
+.arrow:disabled{opacity:.35}
+.when{text-align:center;min-width:0}
+.when .big{font-family:var(--f-display);font-weight:800;font-size:34px;text-transform:uppercase;line-height:1;margin-top:6px}
+.when .small{color:var(--muted);font-size:14px;margin-top:3px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.tag.next{background:var(--accent-soft);color:var(--accent)}
+.tag.today{background:var(--good-soft);color:var(--good)}
+.toggles{display:flex;flex-direction:column;overflow:hidden}
+.tg{display:flex;align-items:center;gap:14px;min-height:76px;padding:12px 16px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;width:100%}
+.tg:first-child{border-top:0}
+.tg:active{background:var(--sunk)}
+.av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none;font-family:var(--f-display);font-weight:800;font-size:20px;border:2px dashed var(--faint);color:var(--faint);transition:background .15s,border-color .15s,color .15s}
+.tg[aria-pressed="true"] .av,.solid{background:var(--pc);border:2px solid var(--pc);color:var(--surface)}
+.tg .who{flex:1;min-width:0}
+.tg .nm{display:block;font-weight:700;font-size:18px}
+.tg .st{display:block;font-size:14px;color:var(--muted)}
+.tg .amt{font-family:var(--f-num);font-weight:600;font-size:16px}
+.sw{width:50px;height:30px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+.tg[aria-pressed="true"] .sw{background:var(--pc);border-color:var(--pc)}
+.tg[aria-pressed="true"] .sw::after{transform:translateX(20px)}
+.summary{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.summary .s1{font-weight:700;font-size:17px}
+.summary .s2{color:var(--muted);font-size:14px}
+.costrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.costrow .field{width:120px;font-family:var(--f-num)}
+.sesstools{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.hint{font-size:13px;color:var(--faint)}
+
+/* ---------- balances ---------- */
+.hero{padding:18px 16px;display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}
+.hero .big{font-family:var(--f-num);font-size:30px;font-weight:600;line-height:1;margin-top:6px}
+.prs{display:flex;flex-direction:column}
+.pr{padding:14px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.pr:first-child{border-top:0}
+.prtop{display:flex;align-items:center;gap:12px}
+.prtop .av{width:40px;height:40px;font-size:18px}
+.prtop .who{flex:1;min-width:0}
+.prtop .nm{font-weight:700;font-size:17px}
+.meta{font-size:13px;color:var(--muted)}
+.prtop .due{text-align:right}
+.prtop .due b{display:block;font-family:var(--f-num);font-size:19px;font-weight:600}
+.prtop .due span{font-size:12px;color:var(--muted)}
+.prtop .due.zero b{color:var(--good)}
+.payform{display:flex;gap:8px}
+.payform .field{flex:1;font-family:var(--f-num)}
+.hist{display:flex;flex-direction:column}
+.hrow{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-top:1px solid var(--line)}
+.hrow:first-child{border-top:0}
+.hrow .av{width:32px;height:32px;font-size:14px}
+.hrow .grow{flex:1;min-width:0}
+
+/* ---------- schedule ---------- */
+.addform{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.addform .rowx{display:flex;gap:8px}
+.addform .field{flex:1}
+.list{display:flex;flex-direction:column;overflow:hidden}
+.srow{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 12px 10px 16px;border:0;border-top:1px solid var(--line);background:transparent;width:100%;text-align:left}
+.srow:first-child{border-top:0}
+.srow:active{background:var(--sunk)}
+.srow .d{width:64px;flex:none}
+.srow .d b{display:block;font-family:var(--f-display);font-size:22px;font-weight:700;text-transform:uppercase;line-height:1}
+.srow .d span{font-size:12px;color:var(--muted)}
+.mini{display:flex;gap:4px;flex:1;min-width:0;flex-wrap:wrap}
+.mini i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-family:var(--f-display);font-weight:800;font-size:13px;border:1.5px dashed var(--faint);color:var(--faint)}
+.mini i.on{background:var(--pc);border:1.5px solid var(--pc);color:var(--surface)}
+.srow .r{text-align:right;font-size:13px;color:var(--muted)}
+.srow .r b{display:block;font-family:var(--f-num);color:var(--ink);font-size:15px;font-weight:600}
+.srow .chev{color:var(--faint);font-size:22px}
+.srow.isnext{box-shadow:inset 3px 0 0 var(--accent)}
+
+/* ---------- settings ---------- */
+.set{padding:16px;display:flex;flex-direction:column;gap:12px}
+.set h3{margin:0;font-size:17px}
+.set p,.set ol{margin:0;color:var(--muted);font-size:15px}
+.set ol{padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.set textarea{width:100%;min-height:90px;border:1px solid var(--line);background:var(--sunk);border-radius:12px;padding:10px 12px;font-family:var(--f-num);font-size:13px;resize:vertical}
+.sub{display:flex;flex-direction:column;gap:10px}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+.acts .btn{flex:1}
+.ppl{display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;align-items:center;gap:10px}
+.prow .av{width:32px;height:32px;font-size:14px}
+.prow .grow{flex:1;font-weight:600}
+
+/* ---------- tab bar ---------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabin{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));height:var(--tabh)}
+.tab{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;font-weight:600;color:var(--muted);padding:0}
+.tab svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-current="page"]{color:var(--accent)}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--tabh) + 16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:7;max-width:calc(100% - 32px);text-align:center}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="topbar gut"><div class="topin"><h1>Training Split</h1><span class="status" id="status" data-s="wait">Connecting…</span></div></div>
+<main class="gut" id="main">
+  <div class="banner" id="banner" hidden></div>
+  <section class="view" id="v-loading"><div class="card empty">Loading…</div></section>
+  <section class="view" id="v-signin" hidden></section>
+  <section class="view" id="v-checkin" aria-label="Check in" hidden></section>
+  <section class="view" id="v-balances" aria-label="Balances" hidden></section>
+  <section class="view" id="v-schedule" aria-label="Schedule" hidden></section>
+  <section class="view" id="v-settings" aria-label="Settings" hidden></section>
+</main>
+
+<nav class="tabbar gut" id="tabbar" aria-label="Sections" hidden><div class="tabin">
+  <button class="tab" data-tab="checkin" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/></svg>Check in</button>
+  <button class="tab" data-tab="balances"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v5M17.5 9.5v5"/></svg>Balances</button>
+  <button class="tab" data-tab="schedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Schedule</button>
+  <button class="tab" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
+</div></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, FieldPath, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ---------------- starting data for a brand-new group ----------------
+const START = {
+  people: ["Carson", "Keaton", "Landon"],
+  defaultCost: 90.9,
+  sessions: {
+    "2026-10-05": { cost: 90.9, attended: { Carson: true, Keaton: true, Landon: true } },
+    "2026-10-19": { cost: 90.9, attended: { Carson: true, Landon: true } },
+    "2026-11-02": { cost: 90.9, attended: {} }, "2026-11-16": { cost: 90.9, attended: {} },
+    "2026-11-30": { cost: 90.9, attended: {} }, "2026-12-14": { cost: 90.9, attended: {} },
+    "2026-12-28": { cost: 90.9, attended: {} }, "2027-01-04": { cost: 90.9, attended: {} },
+    "2027-01-18": { cost: 90.9, attended: {} }, "2027-02-01": { cost: 90.9, attended: {} },
+    "2027-02-15": { cost: 90.9, attended: {} }
+  },
+  payments: {}
+};
+
+// ---------------- helpers ----------------
+const CODE_KEY = "ts-group-code", TAB_KEY = "ts-tab";
+const COLORS = ["var(--p1)", "var(--p2)", "var(--p3)", "var(--p4)", "var(--p5)", "var(--p6)"];
+const ALPHA = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // no 0/O or 1/I to avoid mix-ups
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = c => (c < 0 ? "-" : "") + "$" + (Math.abs(c) / 100).toFixed(2);
+const toC = v => Math.round(Number(v) * 100);
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const parse = id => { const [y, m, d] = id.split("-").map(Number); return new Date(y, m - 1, d) };
+const fmt = (id, o) => parse(id).toLocaleDateString("en-CA", o);
+const today = ymd(new Date());
+const store = { get(k) { try { return localStorage.getItem(k) } catch (_) { return null } }, set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch (_) {} } };
+const cleanCode = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const showCode = c => c.replace(/(.{4})(?=.)/g, "$1-");
+function newCode() { const a = new Uint32Array(12); crypto.getRandomValues(a); return Array.from(a, n => ALPHA[n % 32]).join("") }
+
+let toastT; function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2200) }
+function banner(m, bad) { const b = $("banner"); b.hidden = !m; b.textContent = m || ""; b.classList.toggle("bad", !!bad) }
+function status(s, text) { const st = $("status"); st.dataset.s = s; st.textContent = text }
+function buzz() { try { navigator.vibrate && navigator.vibrate(10) } catch (_) {} }
+async function copy(text, msg) { try { await navigator.clipboard.writeText(text); toast(msg) } catch (_) { toast("Couldn't copy. Press and hold the code to copy it.") } }
+
+// ---------------- app state ----------------
+const UI = { view: "loading", tab: store.get(TAB_KEY) || "checkin", cur: null, editCost: false, confirm: null, payFor: null, signinMode: "join", pendingCode: null, busy: false };
+let G = null;          // the group document, as stored
+let groupCode = null;  // cleaned code
+let ref = null, unsub = null, db = null;
+
+// views of the stored document
+const people = () => (G && Array.isArray(G.people)) ? G.people : [];
+const color = n => COLORS[Math.max(0, people().indexOf(n)) % COLORS.length];
+const sessions = () => Object.entries((G && G.sessions) || {}).map(([id, s]) => ({ id, cost: s.cost, attended: s.attended || {} })).sort((a, b) => a.id.localeCompare(b.id));
+const paymentsList = () => Object.entries((G && G.payments) || {}).map(([id, p]) => ({ id, ...p }));
+const attendees = s => people().filter(n => s.attended && s.attended[n]);
+const costOf = s => toC(typeof s.cost === "number" ? s.cost : G.defaultCost);
+// Split cents between attendees; leftover pennies go to the first names alphabetically so totals always match.
+function split(costC, names) { const out = {}; if (!names.length) return out; const s = [...names].sort(); const base = Math.floor(costC / s.length); let rem = costC - base * s.length; s.forEach(n => { out[n] = base + (rem > 0 ? 1 : 0); if (rem > 0) rem-- }); return out }
+const perText = (s, sep) => { const a = attendees(s); if (!a.length) return ""; return [...new Set(Object.values(split(costOf(s), a)))].map(money).join(sep) };
+function totals() {
+  const t = {}; people().forEach(n => t[n] = { owed: 0, paid: 0, count: 0 });
+  sessions().forEach(s => Object.entries(split(costOf(s), attendees(s))).forEach(([n, c]) => { if (t[n]) { t[n].owed += c; t[n].count++ } }));
+  paymentsList().forEach(p => { if (t[p.person]) t[p.person].paid += toC(p.amount) });
+  return t;
+}
+function defaultIdx(list) { const i = list.findIndex(s => s.id >= today); return i >= 0 ? i : Math.max(0, list.length - 1) }
+
+// ---------------- writing (each change touches only the fields it changes, so two phones never overwrite each other) ----------------
+function write(...pairs) {
+  if (!ref) return;
+  const args = [];
+  for (let i = 0; i < pairs.length; i += 2) args.push(pairs[i] instanceof Array ? new FieldPath(...pairs[i]) : pairs[i], pairs[i + 1]);
+  args.push("updated", today);
+  updateDoc(ref, ...args).catch(err => { console.error(err); banner("That change didn't save: " + (err.code || err.message) + ". Check your connection and try again.", true) });
+}
+
+// ---------------- rendering ----------------
+function show(view) {
+  UI.view = view;
+  ["loading", "signin", "checkin", "balances", "schedule", "settings"].forEach(v => $("v-" + v).hidden = v !== view);
+  const inApp = !["loading", "signin"].includes(view);
+  $("tabbar").hidden = !inApp; $("main").classList.toggle("noTabs", !inApp);
+  document.querySelectorAll(".tab").forEach(b => { if (b.dataset.tab === view) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current") });
+}
+function render() {
+  if (UI.view === "signin") return renderSignin();
+  if (!G) return;
+  show(UI.tab);
+  if (UI.tab === "checkin") renderCheckin();
+  if (UI.tab === "balances") renderBalances();
+  if (UI.tab === "schedule") renderSchedule();
+  if (UI.tab === "settings") renderSettings();
+}
+
+function renderSignin() {
+  show("signin");
+  const el = $("v-signin");
+  if (UI.signinMode === "created") {
+    el.innerHTML = `<div class="signin">
+      <div class="card box"><h3>Your group is ready</h3>
+        <p>This is your group code. Send it to everyone who should see the tracker. Anyone with the code can view and change it, so share it only with the group.</p>
+        <div class="codebig" id="newCodeShow">${esc(showCode(UI.pendingCode))}</div>
+        <div class="acts"><button class="btn" id="copyNew">Copy code</button><button class="btn primary" id="enterNew">Open tracker</button></div>
+      </div></div>`;
+    $("copyNew").onclick = () => copy(showCode(UI.pendingCode), "Code copied");
+    $("enterNew").onclick = () => joinGroup(UI.pendingCode, false);
+    return;
+  }
+  if (UI.signinMode === "confirmCreate") {
+    el.innerHTML = `<div class="signin">
+      <div class="card box"><h3>No group uses that code</h3>
+        <p>Check it with whoever shared it. Codes are 12 letters and numbers, like <span class="num">K7QM-3XPT-2WAD</span>.</p>
+        <div class="codebig">${esc(showCode(UI.pendingCode))}</div>
+        <div class="acts"><button class="btn primary" id="tryAgain">Try a different code</button></div>
+        <button class="linkbtn" id="createThis">Start a new group with this code instead</button>
+      </div></div>`;
+    $("tryAgain").onclick = () => { UI.signinMode = "join"; renderSignin() };
+    $("createThis").onclick = () => createGroup(UI.pendingCode);
+    return;
+  }
+  el.innerHTML = `<div class="signin">
+    <p class="lead">Track who made it to each session and split the cost. Everyone with the group code sees the same numbers, updated live.</p>
+    <form class="card box" id="joinForm">
+      <h3>Join your group</h3>
+      <label class="label" for="codeIn">Group code</label>
+      <input class="field codein" id="codeIn" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX" value="${esc(UI.pendingCode ? showCode(UI.pendingCode) : "")}">
+      <button class="btn primary big block" type="submit" ${UI.busy ? "disabled" : ""}>${UI.busy ? "Checking…" : "Join"}</button>
+    </form>
+    <div class="or">or</div>
+    <div class="card box">
+      <h3>Start a new group</h3>
+      <p>Creates a new tracker with your current schedule and gives you a code to share.</p>
+      <button class="btn big block" id="startNew" ${UI.busy ? "disabled" : ""}>Start a new group</button>
+    </div></div>`;
+  $("joinForm").onsubmit = e => {
+    e.preventDefault(); const c = cleanCode($("codeIn").value);
+    if (c.length < 10) { toast("Enter the full 12-character code"); return }
+    joinGroup(c, true);
+  };
+  $("startNew").onclick = () => createGroup(newCode());
+}
+
+function renderCheckin() {
+  const el = $("v-checkin"); const list = sessions();
+  if (!list.length) { el.innerHTML = `<div class="card empty">No sessions yet. Add one in <b>Schedule</b>.</div>`; return }
+  let i = list.findIndex(s => s.id === UI.cur); if (i < 0) { i = defaultIdx(list); UI.cur = list[i].id }
+  const s = list[i]; const a = attendees(s); const sh = split(costOf(s), a); const nx = defaultIdx(list);
+  const tag = s.id === today ? `<span class="tag today">Today</span>` : (i === nx && s.id > today ? `<span class="tag next">Next session</span>` : (s.id < today ? `<span class="tag">Past</span>` : `<span class="tag">Upcoming</span>`));
+  el.innerHTML = `
+  <div class="pager">
+    <button class="arrow" data-go="-1" aria-label="Previous session" ${i === 0 ? "disabled" : ""}>‹</button>
+    <div class="when">${tag}<div class="big">${esc(fmt(s.id, { weekday: "short", month: "short", day: "numeric" }))}</div><div class="small">${esc(fmt(s.id, { year: "numeric" }))} · session ${i + 1} of ${list.length}</div></div>
+    <button class="arrow" data-go="1" aria-label="Next session" ${i === list.length - 1 ? "disabled" : ""}>›</button>
+  </div>
+  <div class="card toggles">${people().map(n => { const on = !!s.attended[n]; return `<button class="tg" style="--pc:${color(n)}" aria-pressed="${on}" data-toggle="${esc(n)}">
+      <span class="av">${on ? "✓" : esc(n[0])}</span><span class="who"><span class="nm">${esc(n)}</span><span class="st">${on ? "Was there" : "Not there"}</span></span>
+      ${on ? `<span class="amt">${money(sh[n])}</span>` : ""}<span class="sw" aria-hidden="true"></span></button>` }).join("")}</div>
+  ${UI.editCost
+    ? `<form class="card summary" id="costForm"><label class="label" for="sessCost">Cost of this session</label><div class="costrow"><span>$</span><input class="field num" id="sessCost" type="number" step="0.01" min="0" inputmode="decimal" value="${(costOf(s) / 100).toFixed(2)}"><button class="btn primary" type="submit">Save</button><button class="btn ghost" type="button" data-canceledit>Cancel</button></div></form>`
+    : `<div class="card summary"><div><div class="s1">${a.length ? `${perText(s, " / ")} each` : "No one checked in yet"}</div><div class="s2">${money(costOf(s))} split ${a.length ? a.length + " way" + (a.length > 1 ? "s" : "") : "between whoever attends"}</div></div><button class="linkbtn" data-editcost>Change cost</button></div>`}
+  <div class="sesstools">
+    ${i !== nx ? `<button class="linkbtn" data-jump>Back to next session</button>` : `<span class="hint">Swipe or use the arrows to change sessions</span>`}
+    ${UI.confirm === "s:" + s.id ? `<span class="acts"><button class="btn ghost" data-no>Keep</button><button class="btn danger" data-delsess="${s.id}">Remove ${esc(fmt(s.id, { month: "short", day: "numeric" }))}</button></span>` : `<button class="btn ghost" data-ask="s:${s.id}">Remove session</button>`}
+  </div>`;
+}
+
+function renderBalances() {
+  const el = $("v-balances"); const t = totals();
+  const out = people().reduce((sum, n) => sum + Math.max(0, t[n].owed - t[n].paid), 0);
+  const ps = paymentsList().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.at || 0) - (a.at || 0));
+  el.innerHTML = `
+  <div class="card hero"><div><div class="label">Still owed in total</div><div class="big">${money(out)}</div></div><div class="label" style="text-align:right">${sessions().filter(s => attendees(s).length).length} sessions with attendance</div></div>
+  <div class="card prs">${people().map((n, k) => { const x = t[n]; const rem = x.owed - x.paid; const open = UI.payFor === n;
+    return `<div class="pr" style="--pc:${color(n)}">
+      <div class="prtop"><span class="av solid">${esc(n[0])}</span><div class="who"><div class="nm">${esc(n)}</div><div class="meta">${x.count} session${x.count === 1 ? "" : "s"} · paid ${money(x.paid)} of ${money(x.owed)}</div></div>
+        <div class="due ${rem <= 0 ? "zero" : ""}"><b>${money(Math.abs(rem))}</b><span>${rem > 0 ? "owes" : rem < 0 ? "credit" : "paid up"}</span></div></div>
+      ${open ? `<form class="payform" data-payform="${esc(n)}"><input class="field" id="pay-${k}" type="number" step="0.01" min="0.01" inputmode="decimal" value="${(Math.max(rem, 0) / 100).toFixed(2)}" aria-label="Amount ${esc(n)} paid"><button class="btn primary" type="submit">Save</button><button class="btn ghost" type="button" data-paycancel>Cancel</button></form>`
+        : `<button class="btn block" data-pay="${esc(n)}">Record a payment from ${esc(n)}</button>`}
+    </div>` }).join("")}</div>
+  <div class="sechead"><h2>Payment history</h2></div>
+  <div class="card hist">${ps.length ? ps.map(p => `<div class="hrow" style="--pc:${color(p.person)}"><span class="av solid">${esc((p.person || "?")[0])}</span><div class="grow"><b>${esc(p.person)}</b> paid <span class="num">${money(toC(p.amount))}</span><div class="meta">${p.date ? esc(fmt(p.date, { month: "short", day: "numeric", year: "numeric" })) : ""}</div></div>
+      ${UI.confirm === "p:" + p.id ? `<button class="btn ghost" data-no>Keep</button><button class="btn danger" data-delpay="${p.id}">Remove</button>` : `<button class="btn ghost" data-ask="p:${p.id}" aria-label="Remove this payment">✕</button>`}</div>`).join("")
+    : `<div class="empty">No payments yet. Use the buttons above when someone pays.</div>`}</div>`;
+  if (UI.payFor) { const f = el.querySelector("[data-payform] input"); if (f && document.activeElement !== f) { f.focus(); f.select() } }
+}
+
+function renderSchedule() {
+  const el = $("v-schedule"); const list = sessions(); const last = list[list.length - 1];
+  const sugg = last ? (() => { const d = parse(last.id); d.setDate(d.getDate() + 14); return ymd(d) })() : today; const nx = defaultIdx(list); const thisYear = new Date().getFullYear();
+  const row = (s, i) => { const a = attendees(s);
+    return `<button class="srow ${i === nx && s.id >= today ? "isnext" : ""}" data-open="${s.id}" aria-label="Open ${esc(fmt(s.id, { weekday: "long", month: "long", day: "numeric" }))}">
+      <span class="d"><b>${esc(fmt(s.id, { month: "short", day: "numeric" }))}</b><span>${esc(fmt(s.id, { weekday: "short" }))}${parse(s.id).getFullYear() !== thisYear ? " " + parse(s.id).getFullYear() : ""}</span></span>
+      <span class="mini">${people().map(n => `<i class="${s.attended[n] ? "on" : ""}" style="--pc:${color(n)}" title="${esc(n)}">${esc(n[0])}</i>`).join("")}</span>
+      <span class="r">${a.length ? `<b>${perText(s, "/")}</b>each` : (s.id >= today ? "Upcoming" : "No one")}</span><span class="chev" aria-hidden="true">›</span></button>` };
+  const all = list.map((s, i) => [s, i]); const up = all.filter(([s]) => s.id >= today), past = all.filter(([s]) => s.id < today).reverse();
+  const keepDate = document.activeElement && document.activeElement.id === "newDate" ? $("newDate").value : sugg;
+  el.innerHTML = `
+  <form class="card addform" id="addForm"><label class="label" for="newDate">Add a session</label><div class="rowx"><input class="field" id="newDate" type="date" value="${keepDate}"><button class="btn primary" type="submit">Add</button></div><div class="meta">Suggested date is two weeks after the last session.</div></form>
+  <div class="sechead"><h2>Upcoming</h2><span class="label">${up.length}</span></div>
+  <div class="card list">${up.length ? up.map(([s, i]) => row(s, i)).join("") : `<div class="empty">Nothing scheduled. Add a date above.</div>`}</div>
+  <div class="sechead"><h2>Past</h2><span class="label">${past.length}</span></div>
+  <div class="card list">${past.length ? past.map(([s, i]) => row(s, i)).join("") : `<div class="empty">No past sessions yet.</div>`}</div>`;
+}
+
+function renderSettings() {
+  const el = $("v-settings"); const focused = document.activeElement && document.activeElement.id;
+  if (focused === "defaultCost" || focused === "newPerson" || focused === "importText") return; // don't wipe what someone is typing
+  el.innerHTML = `
+  <div class="card set">
+    <h3>Group code</h3>
+    <p>Share this with anyone who should see the tracker. Anyone with it can view and change everything.</p>
+    <div class="codebig">${esc(showCode(groupCode))}</div>
+    <div class="acts"><button class="btn primary" id="copyCode">Copy code</button></div>
+  </div>
+  <div class="card set">
+    <h3>Default cost per session</h3>
+    <p>Used for sessions added from now on. To change one session, open it and tap “Change cost”.</p>
+    <div class="costrow"><span>$</span><input class="field num" id="defaultCost" type="number" step="0.01" min="0" inputmode="decimal" value="${Number(G.defaultCost).toFixed(2)}" aria-label="Default cost per session"><button class="btn primary" type="button" id="saveDefault">Save</button></div>
+  </div>
+  <div class="card set">
+    <h3>People</h3>
+    <div class="ppl">${people().map(n => `<div class="prow" style="--pc:${color(n)}"><span class="av solid">${esc(n[0])}</span><span class="grow">${esc(n)}</span>${UI.confirm === "n:" + n ? `<button class="btn ghost" data-no>Keep</button><button class="btn danger" data-delperson="${esc(n)}">Remove</button>` : `<button class="btn ghost" data-ask="n:${esc(n)}" aria-label="Remove ${esc(n)}">✕</button>`}</div>`).join("")}</div>
+    ${UI.confirm && UI.confirm.startsWith("n:") ? `<p>Removing someone hides them from every session and balance. Adding them back with the same name brings their history back.</p>` : ""}
+    <form class="costrow" id="personForm"><input class="field" id="newPerson" placeholder="Name" maxlength="24" autocomplete="off" style="flex:1;width:auto"><button class="btn" type="submit">Add person</button></form>
+  </div>
+  <div class="card set">
+    <h3>Add to your home screen</h3>
+    <ol>
+      <li><b>iPhone or iPad:</b> in Safari, tap the Share button (the square with an arrow), then <b>Add to Home Screen</b>.</li>
+      <li><b>Android:</b> in Chrome, tap the ⋮ menu, then <b>Add to Home screen</b> or <b>Install app</b>.</li>
+    </ol>
+    <p>You'll enter the group code once more the first time you open the icon.</p>
+  </div>
+  <div class="card set">
+    <h3>Bring in data from the old tracker</h3>
+    <p>In the old Claude version, go to Settings, tap “Copy backup”, then paste it here. This replaces everything in this group for everyone.</p>
+    <button class="btn" id="showImport" aria-expanded="${!!UI.importOpen}">${UI.importOpen ? "Cancel" : "Paste a backup"}</button>
+    <div class="sub" ${UI.importOpen ? "" : "hidden"}>
+      <textarea id="importText" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Backup text"></textarea>
+      <button class="btn danger block" id="doImport">Replace this group's data</button>
+    </div>
+  </div>
+  <div class="card set">
+    <h3>Leave this group on this device</h3>
+    <p>Signs this device out. The group and its data stay as they are for everyone else.</p>
+    <button class="btn block" id="leave">Leave group</button>
+  </div>`;
+  $("copyCode").onclick = () => copy(showCode(groupCode), "Code copied");
+  $("saveDefault").onclick = () => { const raw = $("defaultCost").value; const v = Number(raw); if (raw === "" || !(v >= 0)) { toast("Enter a valid cost"); return } write("defaultCost", Math.round(v * 100) / 100); $("defaultCost").blur(); toast("Saved. New sessions will cost " + money(toC(v))) };
+  $("personForm").onsubmit = e => { e.preventDefault(); const n = $("newPerson").value.trim().replace(/\s+/g, " "); if (!n) return; if (people().includes(n)) { toast(n + " is already in the group"); return } if (people().length >= 12) { toast("A group can have up to 12 people"); return } $("newPerson").value = ""; $("newPerson").blur(); write("people", [...people(), n]); toast("Added " + n) };
+  $("showImport").onclick = () => { UI.importOpen = !UI.importOpen; renderSettings() };
+  $("doImport").onclick = () => importBackup($("importText").value);
+  $("leave").onclick = leaveGroup;
+}
+
+// ---------------- events ----------------
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || !G || UI.view === "signin") return; const d = b.dataset;
+  if (d.tab) { UI.tab = d.tab; UI.confirm = null; UI.payFor = null; UI.editCost = false; store.set(TAB_KEY, d.tab); render(); window.scrollTo(0, 0); return }
+  const list = sessions(); const s = list.find(x => x.id === UI.cur);
+  if (d.toggle && s) { buzz(); write(["sessions", s.id, "attended", d.toggle], !s.attended[d.toggle]); return }
+  if (d.go) { const i = list.findIndex(x => x.id === UI.cur) + Number(d.go); if (list[i]) { UI.cur = list[i].id; UI.editCost = false; UI.confirm = null; render() } return }
+  if ("jump" in d) { UI.cur = (list[defaultIdx(list)] || {}).id; UI.confirm = null; UI.editCost = false; render(); return }
+  if ("editcost" in d) { UI.editCost = true; render(); const f = $("sessCost"); f && f.select(); return }
+  if ("canceledit" in d) { UI.editCost = false; render(); return }
+  if (d.ask) { UI.confirm = d.ask; render(); return }
+  if ("no" in d) { UI.confirm = null; render(); return }
+  if (d.delsess) { const i = list.findIndex(x => x.id === d.delsess); UI.cur = (list[i + 1] || list[i - 1] || {}).id; UI.confirm = null; write(["sessions", d.delsess], deleteField()); toast("Session removed"); return }
+  if (d.open) { UI.cur = d.open; UI.tab = "checkin"; store.set(TAB_KEY, "checkin"); UI.editCost = false; UI.confirm = null; render(); window.scrollTo(0, 0); return }
+  if (d.pay) { UI.payFor = d.pay; UI.confirm = null; render(); return }
+  if ("paycancel" in d) { UI.payFor = null; render(); return }
+  if (d.delpay) { UI.confirm = null; write(["payments", d.delpay], deleteField()); toast("Payment removed"); return }
+  if (d.delperson) { UI.confirm = null; write("people", people().filter(n => n !== d.delperson)); toast("Removed " + d.delperson); return }
+});
+document.addEventListener("submit", e => {
+  const f = e.target; if (!G || UI.view === "signin") return; e.preventDefault();
+  if (f.id === "costForm") { const raw = $("sessCost").value; const v = Number(raw); if (raw === "" || !(v >= 0)) { toast("Enter a valid cost"); return } UI.editCost = false; write(["sessions", UI.cur, "cost"], Math.round(v * 100) / 100); toast("Cost updated"); return }
+  if (f.dataset.payform) { const n = f.dataset.payform; const v = Number(f.querySelector("input").value); if (!(v > 0)) { toast("Enter an amount above $0"); return }
+    const id = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); UI.payFor = null;
+    write(["payments", id], { person: n, amount: Math.round(v * 100) / 100, date: today, at: Date.now() }); toast(`Recorded ${money(toC(v))} from ${n}`); return }
+  if (f.id === "addForm") { const id = $("newDate").value; if (!/^\d{4}-\d{2}-\d{2}$/.test(id)) { toast("Pick a date"); return } if (G.sessions && G.sessions[id]) { toast("That date is already on the schedule"); return }
+    $("newDate").blur(); write(["sessions", id], { cost: G.defaultCost, attended: {} }); toast("Added " + fmt(id, { weekday: "short", month: "short", day: "numeric" })); return }
+});
+// swipe left or right on the check-in screen to move between sessions
+let sx = null, sy = null;
+$("v-checkin").addEventListener("touchstart", e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY }, { passive: true });
+$("v-checkin").addEventListener("touchend", e => { if (sx === null) return; const t = e.changedTouches[0]; const dx = t.clientX - sx, dy = t.clientY - sy; sx = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { const btn = document.querySelector(`[data-go="${dx < 0 ? 1 : -1}"]`); if (btn && !btn.disabled) btn.click() } }, { passive: true });
+
+// ---------------- group sign-in ----------------
+function subscribe(code) {
+  if (unsub) unsub();
+  groupCode = code; ref = doc(db, "groups", code);
+  unsub = onSnapshot(ref, { includeMetadataChanges: true }, snap => {
+    if (!snap.exists()) {
+      if (snap.metadata.fromCache) return; // wait for the server before deciding
+      G = null; store.set(CODE_KEY, null); UI.pendingCode = code; UI.signinMode = "confirmCreate"; banner("That group no longer exists.", true); renderSignin(); return;
+    }
+    G = snap.data();
+    if (snap.metadata.hasPendingWrites) status("wait", "Saving…");
+    else if (snap.metadata.fromCache) status("wait", navigator.onLine ? "Syncing…" : "Offline");
+    else status("ok", "Up to date");
+    if (UI.view === "loading" || UI.view === "signin") { banner(""); UI.view = UI.tab }
+    render();
+  }, err => {
+    console.error(err);
+    status("bad", "Not connected");
+    banner("Couldn't open this group: " + (err.code || err.message) + ". If this keeps happening, check the Firebase setup steps.", true);
+  });
+}
+
+async function joinGroup(code, checkFirst) {
+  UI.busy = true; if (UI.view === "signin") renderSignin();
+  try {
+    if (checkFirst) {
+      const snap = await getDoc(doc(db, "groups", code));
+      if (!snap.exists()) { UI.busy = false; UI.pendingCode = code; UI.signinMode = "confirmCreate"; renderSignin(); return }
+    }
+    store.set(CODE_KEY, code); UI.busy = false; UI.signinMode = "join"; UI.pendingCode = null;
+    show("loading"); subscribe(code);
+  } catch (err) {
+    console.error(err); UI.busy = false; renderSignin();
+    banner(err.code === "unavailable" ? "You're offline. Connect to the internet to join a group." : "Couldn't check that code: " + (err.code || err.message), true);
+  }
+}
+
+async function createGroup(code) {
+  UI.busy = true; renderSignin();
+  try {
+    const existing = await getDoc(doc(db, "groups", code));
+    if (existing.exists()) { UI.busy = false; toast("That code is taken. Joining it instead."); return joinGroup(code, false) }
+    await setDoc(doc(db, "groups", code), { ...START, created: today, updated: today });
+    UI.busy = false; UI.pendingCode = code; UI.signinMode = "created"; renderSignin();
+  } catch (err) {
+    console.error(err); UI.busy = false; renderSignin();
+    banner("Couldn't create the group: " + (err.code || err.message) + ". Check the Firebase setup steps.", true);
+  }
+}
+
+function leaveGroup() {
+  if (unsub) unsub(); unsub = null; G = null; ref = null; groupCode = null;
+  store.set(CODE_KEY, null); UI.signinMode = "join"; UI.pendingCode = null; banner(""); status("wait", "Signed out");
+  renderSignin(); window.scrollTo(0, 0);
+}
+
+function importBackup(text) {
+  let x = null;
+  try { let t = (text || "").trim(); if (t.startsWith("TS1:")) t = decodeURIComponent(escape(atob(t.slice(4)))); x = JSON.parse(t) } catch (_) {}
+  if (!x || !Array.isArray(x.people) || !Array.isArray(x.sessions) || !Array.isArray(x.payments)) { toast("That isn't a backup. Paste the whole text, starting with TS1:"); return }
+  const sess = {}; x.sessions.forEach(s => { if (/^\d{4}-\d{2}-\d{2}$/.test(s.id)) { const att = {}; Object.entries(s.attended || {}).forEach(([n, v]) => { if (v) att[n] = true }); sess[s.id] = { cost: typeof s.cost === "number" ? s.cost : x.defaultCost, attended: att } } });
+  const pay = {}; x.payments.forEach((p, i) => { pay[p.id || ("p" + i)] = { person: p.person, amount: Number(p.amount) || 0, date: p.date || today, at: i } });
+  setDoc(ref, { people: x.people.slice(0, 12), defaultCost: typeof x.defaultCost === "number" ? x.defaultCost : 90.9, sessions: sess, payments: pay, created: (G && G.created) || today, updated: today })
+    .catch(err => banner("Import didn't save: " + (err.code || err.message), true));
+  UI.importOpen = false; UI.tab = "balances"; store.set(TAB_KEY, "balances"); toast("Backup imported");
+}
+
+// ---------------- start ----------------
+function setupMissing() {
+  status("bad", "Not set up");
+  show("signin");
+  $("v-signin").innerHTML = `<div class="card set"><h3>Almost there</h3><p>This app isn't connected to Firebase yet. Open <b>firebase-config.js</b> in your GitHub repository and paste in your Firebase web app settings, then reload this page.</p></div>`;
+}
+
+if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE")) {
+  setupMissing();
+} else {
+  const app = initializeApp(firebaseConfig);
+  try { db = initializeFirestore(app, { localCache: persistentLocalCache() }) } catch (_) { db = initializeFirestore(app, {}) }
+  const auth = getAuth(app);
+  let started = false;
+  onAuthStateChanged(auth, user => {
+    if (!user || started) return; started = true;
+    const saved = cleanCode(store.get(CODE_KEY));
+    if (saved.length >= 10) { status("wait", "Connecting…"); subscribe(saved) }
+    else { status("wait", "Not signed in"); UI.view = "signin"; renderSignin() }
+  });
+  signInAnonymously(auth).catch(err => {
+    console.error(err); status("bad", "Not connected");
+    show("signin");
+    banner(err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation"
+      ? "Anonymous sign-in is turned off in Firebase. Turn it on under Authentication > Sign-in method > Anonymous."
+      : (err.code === "auth/network-request-failed" ? "You're offline. Connect to the internet and reload." : "Couldn't connect: " + (err.code || err.message)), true);
+  });
+  window.addEventListener("online", () => toast("Back online"));
+  window.addEventListener("offline", () => status("wait", "Offline"));
+}
+</script>
+</body>
+</html>

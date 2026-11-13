@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each group is one document whose ID is the group code.
+    // You can open a group only if you already know its code: listing groups is never allowed.
+    match /groups/{code} {
+      allow get: if request.auth != null;
+
+      allow create, update: if request.auth != null
+        && code.size() >= 10 && code.size() <= 40
+        && request.resource.data.keys().hasOnly(['people', 'defaultCost', 'sessions', 'payments', 'updated', 'created'])
+        && request.resource.data.people is list
+        && request.resource.data.people.size() <= 12
+        && request.resource.data.defaultCost is number
+        && request.resource.data.sessions is map
+        && request.resource.data.payments is map;
+
+      allow list, delete: if false;
+    }
+  }
+}
