@@ -215,10 +215,32 @@ main.noTabs{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module">
-import { firebaseConfig } from "./firebase-config.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, FieldPath, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+// Load each file separately so a problem shows a clear message instead of a page stuck on "Connecting…".
+function fatal(title, detail) {
+  const st = document.getElementById("status"); st.dataset.s = "bad"; st.textContent = "Not working";
+  document.getElementById("v-loading").innerHTML = `<div class="card set"><h3>${title}</h3><p>${detail}</p></div>`;
+}
+async function load(url, what) {
+  try { return await import(url) }
+  catch (e) {
+    const msg = String(e && e.message || e).replace(/[<>&]/g, "");
+    if (what === "config") fatal("There's a problem in firebase-config.js",
+      "The file is missing or has a typo. Open it on GitHub and check that it starts with <b>export const firebaseConfig = {</b>, that every value is in \"quotes\" with a comma after it, and that it ends with <b>};</b>. Remove any <b>import</b> or <b>initializeApp</b> lines copied from Firebase.<br><br><span class=\"meta\">Details: " + msg + "</span>");
+    else fatal("Couldn't load Firebase", "Check your internet connection and reload. If you're on a work or school network, it may be blocking Google services.<br><br><span class=\"meta\">Details: " + msg + "</span>");
+    throw e;
+  }
+}
+const [cfgMod, appMod, authMod, fsMod] = await Promise.all([
+  load("./firebase-config.js?v=" + Date.now(), "config"),
+  load("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js", "sdk"),
+  load("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js", "sdk"),
+  load("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js", "sdk")
+]);
+const { firebaseConfig } = cfgMod;
+const { initializeApp } = appMod;
+const { getAuth, signInAnonymously, onAuthStateChanged } = authMod;
+const { initializeFirestore, persistentLocalCache, doc, getDoc, setDoc, updateDoc, onSnapshot, FieldPath, deleteField } = fsMod;
+if (!firebaseConfig) fatal("There's a problem in firebase-config.js", "The file loaded but doesn't contain <b>export const firebaseConfig = { … };</b>. Check the first line of the file on GitHub."), (() => { throw new Error("no firebaseConfig export") })();
 
 // ---------------- starting data for a brand-new group ----------------
 const START = {
@@ -600,6 +622,9 @@ if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWit
       ? "Anonymous sign-in is turned off in Firebase. Turn it on under Authentication > Sign-in method > Anonymous."
       : (err.code === "auth/network-request-failed" ? "You're offline. Connect to the internet and reload." : "Couldn't connect: " + (err.code || err.message)), true);
   });
+  // If nothing has happened after 15 seconds, say so instead of spinning forever.
+  setTimeout(() => { if (UI.view === "loading" && $("status").textContent === "Connecting…")
+    fatal("Still connecting", "Firebase hasn't answered yet. Check your internet connection and reload. If it keeps happening, make sure <b>Anonymous</b> sign-in is turned on (Firebase: Authentication, then Sign-in method) and your <b>github.io</b> address is under Authentication, then Settings, then Authorized domains.") }, 15000);
   window.addEventListener("online", () => toast("Back online"));
   window.addEventListener("offline", () => status("wait", "Offline"));
 }
